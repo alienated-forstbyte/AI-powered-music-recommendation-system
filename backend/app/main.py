@@ -1,7 +1,11 @@
 from fastapi import FastAPI
 from backend.app.routes import search, recommend
+from backend.app.routes import play
+
 
 app = FastAPI(title="Music Recommender")
+
+app.include_router(play.router)
 
 app.include_router(search.router)
 app.include_router(recommend.router)

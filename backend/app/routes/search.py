@@ -9,9 +9,16 @@ router = APIRouter(prefix="/search", tags=["Search"])
 def search(query: str, max_results: int = 5):
     results = search_youtube(query, max_results)
 
+    # log_event("search", {
+    #     "query": query,
+    #     "results_count": len(results) if isinstance(results, list) else 0
+    # })
+
+
     log_event("search", {
+        "user_id": "user_1",   
         "query": query,
-        "results_count": len(results) if isinstance(results, list) else 0
+        "results_count": len(results)
     })
 
     return results
