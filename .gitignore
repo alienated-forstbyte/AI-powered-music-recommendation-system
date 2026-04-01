@@ -1,0 +1,89 @@
+# =========================
+# 🐍 Python
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual environments
+venv/
+.env/
+.venv/
+env/
+
+# =========================
+# 📦 Build / Packaging
+# =========================
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# =========================
+# 📊 ML / Data Artifacts
+# =========================
+ml/model.pkl
+ml/*.pkl
+data/raw/*.json
+data/processed/
+*.csv
+*.parquet
+
+# (Optional: keep sample data if needed)
+# !data/raw/sample.json
+
+# =========================
+# 🧠 Logs
+# =========================
+*.log
+logs/
+*.out
+
+# =========================
+# 🔐 Environment Variables
+# =========================
+.env
+.env.*
+*.env
+
+# =========================
+# 🐳 Docker
+# =========================
+.dockerignore
+docker-compose.override.yml
+
+# =========================
+# 🖥️ IDE / Editor
+# =========================
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# =========================
+# 🐧 OS Files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# 📈 Grafana / Loki (if local data used)
+# =========================
+grafana-data/
+loki-data/
+
+# =========================
+# 🧪 Testing / Cache
+# =========================
+.pytest_cache/
+.cache/
+coverage/
+*.cover
+
+# =========================
+# 🔥 Temporary Files
+# =========================
+tmp/
+temp/

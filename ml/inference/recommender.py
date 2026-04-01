@@ -5,7 +5,7 @@ import numpy as np
 class Recommender:
     def __init__(self, model_path="ml/model.pkl"):
         with open(model_path, "rb") as f:
-            self.songs, self.similarity_matrix = pickle.load(f)
+            self.songs, self.embeddings = pickle.load(f)
 
         # map video_id → index
         self.video_to_index = {
@@ -51,8 +51,11 @@ class Recommender:
         
     def recommend_for_user(self, user_history, top_k=5):
         vectors = []
+        print("User history:", user_history)
 
         for vid in user_history:
+            print("Checking:", vid, "→", vid in self.video_to_index)
+        for vid in user_history: 
             if vid in self.video_to_index:
                 idx = self.video_to_index[vid]
                 vectors.append(self.embeddings[idx])
@@ -62,14 +65,16 @@ class Recommender:
 
         # 🔥 Create USER VECTOR
         user_vector = np.mean(vectors, axis=0)
+        user_vector = user_vector / np.linalg.norm(user_vector)
 
         # 🔥 Compare with ALL songs
         scores = []
 
         for i, song_vec in enumerate(self.embeddings):
-            score = np.dot(user_vector, song_vec) / (
-                np.linalg.norm(user_vector) * np.linalg.norm(song_vec)
-            )
+            score = np.dot(user_vector, song_vec) 
+            # / (
+            #     np.linalg.norm(user_vector) * np.linalg.norm(song_vec)
+            # )
             scores.append((i, score))
 
         ranked = sorted(scores, key=lambda x: x[1], reverse=True)

@@ -25,7 +25,8 @@ def run_pipeline():
         all_video_ids.update(vids)
     print("Collected video IDs:", all_video_ids)
 
-    songs = fetch_metadata(all_video_ids)
+    with open("data/raw/songs.json", "r") as f:
+        songs = json.load(f)
     print("All video IDs:", all_video_ids)
 
     with open("data/raw/songs.json", "w") as f:

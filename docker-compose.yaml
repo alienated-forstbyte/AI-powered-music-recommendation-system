@@ -1,6 +1,20 @@
 version: "3.8"
 
 services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: music-backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      - loki
+    environment:
+      - LOKI_URL=http://loki:3100/loki/api/v1/push
+    volumes:
+      - .:/app
+
   loki:
     image: grafana/loki:2.9.0
     container_name: loki
