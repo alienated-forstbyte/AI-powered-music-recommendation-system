@@ -12,7 +12,7 @@ SOCKET_PATH = os.environ.get("MUSIC_PLAYER_SOCKET", "/tmp/music-player.sock")
 def send(cmd: str, **args) -> dict:
     payload = json.dumps({"command": cmd, "args": args})
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    sock.settimeout(5)
+    sock.settimeout(10)
     try:
         sock.connect(SOCKET_PATH)
     except FileNotFoundError:
@@ -24,12 +24,19 @@ def send(cmd: str, **args) -> dict:
     sock.sendall(payload.encode())
     sock.shutdown(socket.SHUT_WR)
     data = b""
-    while True:
-        chunk = sock.recv(4096)
-        if not chunk:
-            break
-        data += chunk
+    try:
+        while True:
+            chunk = sock.recv(4096)
+            if not chunk:
+                break
+            data += chunk
+    except socket.timeout:
+        print(json.dumps({"error": "daemon timed out", "hint": "the daemon might be busy starting playback"}))
+        sys.exit(1)
     sock.close()
+    if not data:
+        print(json.dumps({"error": "empty response from daemon"}))
+        sys.exit(1)
     return json.loads(data.decode())
 
 

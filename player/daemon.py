@@ -29,6 +29,8 @@ class PlayerDaemon:
         self.volume = 100
         self.current_song: dict | None = None
         self._ffplay_ended = threading.Event()
+        self._skip_lock = threading.Lock()
+        self._last_skip_at = 0.0
 
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
         self._load_state()
@@ -36,19 +38,26 @@ class PlayerDaemon:
     # ── socket handling ──────────────────────────────────────────
 
     async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
-        data = b""
-        while True:
-            chunk = await reader.read(4096)
-            if not chunk:
-                break
-            data += chunk
-            if len(chunk) < 4096:
-                break
-        raw = data.decode().strip()
-        result = self._dispatch(raw)
-        writer.write(result.encode() + b"\n")
-        await writer.drain()
-        writer.close()
+        try:
+            data = b""
+            while True:
+                chunk = await reader.read(4096)
+                if not chunk:
+                    break
+                data += chunk
+                if len(chunk) < 4096:
+                    break
+            raw = data.decode().strip()
+            result = self._dispatch(raw)
+            writer.write(result.encode() + b"\n")
+            await writer.drain()
+        except (ConnectionResetError, BrokenPipeError, OSError):
+            pass
+        finally:
+            try:
+                writer.close()
+            except Exception:
+                pass
 
     def _dispatch(self, raw: str) -> str:
         try:
@@ -115,8 +124,8 @@ class PlayerDaemon:
 
         url = self._get_audio_url(song["video_id"])
         if not url:
-            self._log(f"No audio URL for {song['video_id']}, skipping")
-            self._cmd_next()
+            self._log(f"Can't get audio URL for {song['video_id']}, skipping")
+            threading.Thread(target=self._skip_after_cooldown, daemon=True).start()
             return
 
         self._stop_ffplay()
@@ -132,12 +141,25 @@ class PlayerDaemon:
 
         threading.Thread(target=self._wait_ffplay, daemon=True).start()
 
+    def _skip_after_cooldown(self):
+        import time
+        time.sleep(3)
+        self._cmd_next()
+
     def _wait_ffplay(self):
-        if self.ffplay_proc:
-            self.ffplay_proc.wait()
+        proc = self.ffplay_proc
+        if proc:
+            proc.wait()
             self._ffplay_ended.set()
-            if not self.paused and self.current_index is not None:
-                self._cmd_next()
+            # Only auto-advance if ffplay exited cleanly (song finished naturally),
+            # not if it failed (e.g. expired URL, network error)
+            if proc.returncode == 0 and not self.paused and self.current_index is not None:
+                if len(self.queue) > 1:
+                    self._log("Song finished, advancing to next")
+                    self._cmd_next()
+                else:
+                    self._log("Song finished, end of queue")
+                    self._cmd_stop()
 
     def _stop_ffplay(self):
         if self.ffplay_proc:
@@ -190,6 +212,11 @@ class PlayerDaemon:
     def _cmd_next(self):
         if not self.queue:
             return {"status": "empty_queue"}
+        with self._skip_lock:
+            now = __import__('time').time()
+            if now - self._last_skip_at < 2.0:
+                return {"status": "debounced"}
+            self._last_skip_at = now
         nxt = 0 if self.current_index is None else (self.current_index + 1) % len(self.queue)
         self._play_index(nxt)
         return {"status": "playing", "song": self.current_song}
@@ -197,6 +224,11 @@ class PlayerDaemon:
     def _cmd_prev(self):
         if not self.queue:
             return {"status": "empty_queue"}
+        with self._skip_lock:
+            now = __import__('time').time()
+            if now - self._last_skip_at < 2.0:
+                return {"status": "debounced"}
+            self._last_skip_at = now
         prv = len(self.queue) - 1 if self.current_index is None else (self.current_index - 1) % len(self.queue)
         self._play_index(prv)
         return {"status": "playing", "song": self.current_song}
