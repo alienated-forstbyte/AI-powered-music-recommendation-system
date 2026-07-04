@@ -28,6 +28,9 @@ ml/model.pkl
 ml/*.pkl
 data/raw/*.json
 data/processed/
+data/*.db
+data/*.db-wal
+data/*.db-shm
 *.csv
 *.parquet
 

@@ -1,0 +1,60 @@
+{
+  "title": "Music Recommender",
+  "uid": "music-recommender",
+  "version": 1,
+  "panels": [
+    {
+      "title": "Search Events",
+      "type": "logs",
+      "datasource": "Loki",
+      "id": 1,
+      "targets": [
+        {
+          "expr": "{app=\"music-recommender\", event=\"search\"}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
+    },
+    {
+      "title": "Play Events",
+      "type": "logs",
+      "datasource": "Loki",
+      "id": 2,
+      "targets": [
+        {
+          "expr": "{app=\"music-recommender\", event=\"play\"}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
+    },
+    {
+      "title": "Play Count (Last Hour)",
+      "type": "timeseries",
+      "datasource": "Loki",
+      "id": 3,
+      "targets": [
+        {
+          "expr": "sum by (user_id) (count_over_time({app=\"music-recommender\", event=\"play\"}[1h]))",
+          "refId": "A"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
+    },
+    {
+      "title": "Event Count by Type",
+      "type": "stat",
+      "datasource": "Loki",
+      "id": 4,
+      "targets": [
+        {
+          "expr": "count_over_time({app=\"music-recommender\"}[24h])",
+          "refId": "A"
+        }
+      ],
+      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 8 }
+    }
+  ],
+  "schemaVersion": 38
+}

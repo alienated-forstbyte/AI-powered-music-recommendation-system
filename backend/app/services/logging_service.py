@@ -1,9 +1,10 @@
+import os
 import requests
 import json
 from datetime import datetime
 import time
 
-LOKI_URL = "http://localhost:3100/loki/api/v1/push"
+LOKI_URL = os.environ.get("LOKI_URL", "http://localhost:3100/loki/api/v1/push")
 
 
 def log_event(event_type: str, data: dict):

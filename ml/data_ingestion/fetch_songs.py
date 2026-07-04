@@ -16,8 +16,7 @@ QUERIES = [
 def fetch_songs(max_results=20):
     ydl_opts = {
         "quiet": True,
-        "extract_flat": True,
-        "skip_download": True
+        "skip_download": True,
     }
 
     all_songs = {}
@@ -35,7 +34,7 @@ def fetch_songs(max_results=20):
                         "video_id": vid,
                         "title": entry.get("title", ""),
                         "channel": entry.get("uploader", ""),
-                        "tags": []  # optional
+                        "tags": entry.get("tags") or [],
                     }
 
     return list(all_songs.values())

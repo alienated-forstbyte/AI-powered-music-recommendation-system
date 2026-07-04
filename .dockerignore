@@ -1,7 +1,10 @@
 __pycache__/
 *.pyc
-*.pkl
 *.log
+*.db
+*.db-wal
+*.db-shm
 .env
 .git
 venv/
+node_modules/

@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Music Recommender</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f0f0f; color: #e0e0e0; min-height: 100vh; padding-bottom: 80px; }
+header { background: #1a1a2e; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+header h1 { font-size: 20px; color: #e94560; }
+.user-section { display: flex; align-items: center; gap: 8px; }
+.user-section label { font-size: 13px; color: #aaa; }
+.user-section input { background: #16213e; border: 1px solid #333; color: #e0e0e0; padding: 6px 12px; border-radius: 6px; font-size: 14px; width: 140px; }
+.user-section input:focus { outline: none; border-color: #e94560; }
+.search-bar { display: flex; gap: 8px; padding: 16px 24px; max-width: 800px; margin: 0 auto; }
+.search-bar input { flex: 1; background: #1a1a2e; border: 1px solid #333; color: #e0e0e0; padding: 10px 16px; border-radius: 8px; font-size: 15px; }
+.search-bar input:focus { outline: none; border-color: #e94560; }
+.btn { padding: 8px 20px; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; transition: all .2s; font-weight: 600; white-space: nowrap; }
+.btn-primary { background: #e94560; color: #fff; }
+.btn-primary:hover { background: #d63851; }
+.btn-secondary { background: #16213e; color: #ccc; }
+.btn-secondary:hover { background: #1a2a4e; color: #fff; }
+.btn-sm { padding: 5px 12px; font-size: 12px; }
+.btn-play { background: #2ecc71; color: #fff; }
+.btn-play:hover { background: #27ae60; }
+.btn-listen { background: #3498db; color: #fff; }
+.btn-listen:hover { background: #2980b9; }
+.btn-skip { background: #555; color: #ccc; }
+.btn-skip:hover { background: #777; color: #fff; }
+.btn-danger { background: #e74c3c; color: #fff; }
+.container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+.tabs { display: flex; gap: 0; padding: 16px 0 0; border-bottom: 1px solid #222; }
+.tab { padding: 10px 24px; cursor: pointer; color: #888; font-size: 14px; font-weight: 600; border-bottom: 2px solid transparent; transition: all .2s; }
+.tab:hover { color: #ccc; }
+.tab.active { color: #e94560; border-bottom-color: #e94560; }
+.tab-content { display: none; padding: 20px 0; }
+.tab-content.active { display: block; }
+.song-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+.song-card { background: #1a1a2e; border-radius: 12px; overflow: hidden; transition: transform .15s; border: 1px solid #222; }
+.song-card:hover { transform: translateY(-2px); border-color: #333; }
+.song-card img { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; }
+.song-info { padding: 12px 14px 8px; }
+.song-info h3 { font-size: 14px; font-weight: 600; margin-bottom: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.song-info .channel { font-size: 12px; color: #888; margin-bottom: 6px; }
+.song-info .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.song-info .tags span { background: #16213e; color: #888; font-size: 10px; padding: 2px 6px; border-radius: 4px; }
+.song-card .actions { display: flex; gap: 6px; padding: 0 14px 12px; flex-wrap: wrap; }
+.empty-state { text-align: center; padding: 60px 20px; color: #555; }
+.empty-state p { margin-top: 8px; font-size: 14px; }
+.loading { text-align: center; padding: 40px; color: #888; }
+.toast { position: fixed; bottom: 90px; right: 24px; background: #1a1a2e; color: #ccc; padding: 12px 20px; border-radius: 8px; border-left: 3px solid #e94560; box-shadow: 0 4px 20px rgba(0,0,0,.5); font-size: 13px; z-index: 100; animation: slideIn .3s; }
+.toast.success { border-left-color: #2ecc71; }
+.toast.error { border-left-color: #e74c3c; }
+@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+/* Now Playing bar (fixed bottom) */
+.now-playing-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #1a1a2e; border-top: 2px solid #e94560; padding: 10px 24px; display: flex; align-items: center; gap: 14px; z-index: 200; min-height: 64px; }
+.now-playing-bar .np-thumb { width: 44px; height: 44px; border-radius: 6px; object-fit: cover; flex-shrink: 0; }
+.now-playing-bar .np-info { flex: 1; min-width: 0; }
+.now-playing-bar .np-info .np-title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.now-playing-bar .np-info .np-channel { font-size: 11px; color: #888; }
+.now-playing-bar .controls { display: flex; gap: 4px; flex-shrink: 0; }
+.now-playing-bar .controls button { background: none; border: none; color: #ccc; font-size: 18px; cursor: pointer; padding: 4px 8px; border-radius: 4px; transition: all .15s; }
+.now-playing-bar .controls button:hover { color: #fff; background: #333; }
+.now-playing-bar .controls .btn-vol { font-size: 14px; }
+.now-playing-bar .np-vol { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.now-playing-bar .np-vol input { width: 60px; accent-color: #e94560; }
+.now-playing-bar .queue-badge { background: #333; color: #aaa; font-size: 11px; padding: 2px 8px; border-radius: 10px; flex-shrink: 0; }
+.now-playing-bar .bar-empty { color: #555; font-size: 13px; flex: 1; }
+
+@media (max-width: 600px) { .song-grid { grid-template-columns: 1fr; } header { flex-direction: column; align-items: stretch; } .user-section { justify-content: center; } .now-playing-bar { flex-wrap: wrap; padding: 10px 12px; } .now-playing-bar .np-vol { display: none; } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Music Recommender</h1>
+  <div class="user-section">
+    <label>User ID</label>
+    <input id="userId" placeholder="user_1" value="">
+  </div>
+</header>
+
+<div class="search-bar">
+  <input id="searchInput" placeholder="Search songs..." onkeydown="if(event.key==='Enter') search()">
+  <button class="btn btn-secondary" onclick="search()">Search</button>
+  <button class="btn btn-primary" onclick="loadRecommendations()">Recommend</button>
+</div>
+
+<div class="container">
+  <div class="tabs">
+    <div class="tab active" data-tab="recommend" onclick="switchTab('recommend')">Recommendations</div>
+    <div class="tab" data-tab="search" onclick="switchTab('search')">Search Results</div>
+    <div class="tab" data-tab="queue" onclick="switchTab('queue');refreshQueue()">Queue</div>
+  </div>
+
+  <div id="tab-recommend" class="tab-content active"></div>
+  <div id="tab-search" class="tab-content"></div>
+  <div id="tab-queue" class="tab-content"></div>
+</div>
+
+<!-- Fixed Now Playing bar -->
+<div class="now-playing-bar" id="nowPlayingBar">
+  <div class="bar-empty" id="barEmpty">♫ No song playing — click <strong>Listen</strong> on any track</div>
+  <img class="np-thumb" id="npThumb" src="" style="display:none">
+  <div class="np-info" id="npInfo" style="display:none">
+    <div class="np-title" id="npTitle"></div>
+    <div class="np-channel" id="npChannel"></div>
+  </div>
+  <div class="controls" id="npControls" style="display:none">
+    <button onclick="playerPrev()" title="Previous">⏮</button>
+    <button onclick="playerToggle()" id="playPauseBtn" title="Play/Pause">⏸</button>
+    <button onclick="playerNext()" title="Next">⏭</button>
+    <button onclick="playerStop()" title="Stop">⏹</button>
+  </div>
+  <div class="np-vol">
+    <span class="btn-vol">🔊</span>
+    <input type="range" min="0" max="150" value="100" id="volSlider" oninput="playerVolume(this.value)">
+    <span class="queue-badge" id="queueBadge">0</span>
+  </div>
+</div>
+
+<script>
+const API = '';
+
+function getUserId() {
+  let el = document.getElementById('userId');
+  return el.value.trim() || 'user_1';
+}
+
+let statusPoll = null;
+
+// ── Player daemon API ──────────────────────────────────────────
+
+async function playerAPI(endpoint, params = {}) {
+  let url = API + '/player/' + endpoint + '?' + new URLSearchParams(params);
+  try {
+    let r = await fetch(url, {method: endpoint.startsWith('get') ? 'GET' : 'POST'});
+    return await r.json();
+  } catch(e) {
+    return {error: e.message};
+  }
+}
+
+async function playerPlay(videoId, title, channel) {
+  await playerAPI('play', {video_id: videoId, title, channel});
+  pollStatus();
+  toast('Added to queue ▶', 'success');
+}
+
+async function playerToggle() {
+  let resp = await playerAPI('toggle');
+  pollStatus();
+}
+
+async function playerNext() {
+  await playerAPI('next');
+  pollStatus();
+}
+
+async function playerPrev() {
+  await playerAPI('prev');
+  pollStatus();
+}
+
+async function playerStop() {
+  await playerAPI('stop');
+  pollStatus();
+}
+
+async function playerVolume(level) {
+  await playerAPI('volume', {level});
+}
+
+async function refreshQueue() {
+  let resp = await playerAPI('get_queue');
+  let tab = document.getElementById('tab-queue');
+  if (resp.error) {
+    tab.innerHTML = '<div class="empty-state"><h2>Daemon not running</h2><p>Start the player daemon first</p></div>';
+    return;
+  }
+  let queue = resp.queue || [];
+  let idx = resp.current_index;
+  if (queue.length === 0) {
+    tab.innerHTML = '<div class="empty-state"><h2>Queue is empty</h2><p>Search and click Listen to add songs</p></div>';
+    return;
+  }
+  let html = '<div class="song-grid">';
+  for (let i = 0; i < queue.length; i++) {
+    let s = queue[i];
+    let thumb = `https://img.youtube.com/vi/${s.video_id}/mqdefault.jpg`;
+    let active = i === idx ? 'style="border-color: #e94560;"' : '';
+    html += `<div class="song-card" ${active}>
+      <img src="${thumb}" loading="lazy" onerror="this.style.display='none'">
+      <div class="song-info">
+        <h3>${i === idx ? '▶ ' : ''}${escHtml(s.title)}</h3>
+        <div class="channel">${escHtml(s.channel || '')}</div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-sm btn-play" onclick="playerPlay('${s.video_id}','${escAttr(s.title)}','${escAttr(s.channel||'')}')">Play</button>
+        <button class="btn btn-sm btn-skip" onclick="removeFromQueue(${i})">Remove</button>
+      </div>
+    </div>`;
+  }
+  html += '</div>';
+  tab.innerHTML = html;
+}
+
+async function removeFromQueue(index) {
+  await playerAPI('remove', {index});
+  refreshQueue();
+  pollStatus();
+}
+
+// ── Status polling ─────────────────────────────────────────────
+
+async function pollStatus() {
+  let resp = await playerAPI('get_status');
+  updateNowPlaying(resp);
+  return resp;
+}
+
+function updateNowPlaying(resp) {
+  let empty = document.getElementById('barEmpty');
+  let thumb = document.getElementById('npThumb');
+  let info = document.getElementById('npInfo');
+  let controls = document.getElementById('npControls');
+  let title = document.getElementById('npTitle');
+  let channel = document.getElementById('npChannel');
+  let badge = document.getElementById('queueBadge');
+  let playBtn = document.getElementById('playPauseBtn');
+
+  if (resp.error || resp.status === 'stopped' || !resp.song) {
+    empty.style.display = '';
+    thumb.style.display = 'none';
+    info.style.display = 'none';
+    controls.style.display = 'none';
+    badge.textContent = resp.queue_length || 0;
+    return;
+  }
+
+  empty.style.display = 'none';
+  thumb.style.display = '';
+  info.style.display = '';
+  controls.style.display = '';
+
+  let s = resp.song;
+  thumb.src = `https://img.youtube.com/vi/${s.video_id}/mqdefault.jpg`;
+  title.textContent = s.title || s.video_id;
+  channel.textContent = s.channel || '';
+  badge.textContent = resp.queue_length || 0;
+  playBtn.textContent = resp.status === 'paused' ? '▶' : '⏸';
+}
+
+// ── Tab / UI helpers ───────────────────────────────────────────
+
+function toast(msg, type) {
+  let t = document.createElement('div');
+  t.className = 'toast ' + (type || '');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
+function loading(el, msg) {
+  el.innerHTML = '<div class="loading">' + (msg || 'Loading...') + '</div>';
+}
+
+function songCard(song) {
+  let thumb = `https://img.youtube.com/vi/${song.video_id}/mqdefault.jpg`;
+  let tags = (song.tags || []).slice(0, 5);
+  return `<div class="song-card">
+    <img src="${thumb}" alt="" loading="lazy" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22320%22 height=%22180%22><rect fill=%22%2316213e%22 width=%22320%22 height=%22180%22/><text fill=%22%23555%22 font-size=%2224%22 x=%22120%22 y=%22100%22>No Thumb</text></svg>'">
+    <div class="song-info">
+      <h3 title="${escAttr(song.title)}">${escHtml(song.title)}</h3>
+      <div class="channel">${escHtml(song.channel || '')}</div>
+      <div class="tags">${tags.map(t => '<span>' + escHtml(t) + '</span>').join('')}</div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-sm btn-listen" onclick="playerPlay('${song.video_id}','${escAttr(song.title)}','${escAttr(song.channel||'')}')">Listen ♫</button>
+      <button class="btn btn-sm btn-play" onclick="playSong('${song.video_id}','${escAttr(song.title)}','${escAttr(song.channel||'')}')">YouTube</button>
+      <button class="btn btn-sm btn-skip" onclick="skipSong('${song.video_id}', ${JSON.stringify(tags)})">Skip</button>
+    </div>
+  </div>`;
+}
+
+function escHtml(s) {
+  let d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function escAttr(s) {
+  return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderSongs(container, songs) {
+  if (!songs || songs.length === 0) {
+    container.innerHTML = '<div class="empty-state"><h2>No songs found</h2><p>Try a different search or user ID</p></div>';
+    return;
+  }
+  container.innerHTML = '<div class="song-grid">' + songs.map(songCard).join('') + '</div>';
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelector('.tab[data-tab="' + name + '"]').classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
+async function loadRecommendations() {
+  let uid = getUserId();
+  let tab = document.getElementById('tab-recommend');
+  switchTab('recommend');
+  loading(tab, 'Getting recommendations...');
+  try {
+    let r = await fetch(API + '/recommend/user?user_id=' + encodeURIComponent(uid) + '&top_k=12');
+    let songs = await r.json();
+    renderSongs(tab, songs);
+  } catch(e) {
+    tab.innerHTML = '<div class="empty-state"><h2>Error</h2><p>' + e.message + '</p></div>';
+  }
+}
+
+async function search() {
+  let q = document.getElementById('searchInput').value.trim();
+  if (!q) return;
+  let tab = document.getElementById('tab-search');
+  switchTab('search');
+  loading(tab, 'Searching...');
+  try {
+    let r = await fetch(API + '/search/?query=' + encodeURIComponent(q) + '&max_results=10');
+    let songs = await r.json();
+    renderSongs(tab, songs);
+  } catch(e) {
+    tab.innerHTML = '<div class="empty-state"><h2>Error</h2><p>' + e.message + '</p></div>';
+  }
+}
+
+function playSong(videoId, title, channel) {
+  window.open('https://www.youtube.com/watch?v=' + videoId, '_blank');
+  fetch(API + '/play/?video_id=' + encodeURIComponent(videoId) + '&user_id=' + encodeURIComponent(getUserId()), {method: 'POST'})
+    .catch(() => {});
+}
+
+async function skipSong(videoId, tags) {
+  let uid = getUserId();
+  let tagStr = tags.join(',');
+  try {
+    let r = await fetch(API + '/feedback/?user_id=' + encodeURIComponent(uid) + '&video_id=' + encodeURIComponent(videoId) + '&action=skip&tags=' + encodeURIComponent(tagStr), {method: 'POST'});
+    let data = await r.json();
+    toast('Skipped! Excluded: ' + (data.excluded_tags || []).join(', '), 'success');
+    loadRecommendations();
+  } catch(e) {
+    toast('Error: ' + e.message, 'error');
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  let saved = localStorage.getItem('music_user_id');
+  if (saved) document.getElementById('userId').value = saved;
+  document.getElementById('userId').addEventListener('change', () => {
+    localStorage.setItem('music_user_id', document.getElementById('userId').value);
+  });
+  loadRecommendations();
+  // Poll player status every 2s
+  statusPoll = setInterval(pollStatus, 2000);
+  pollStatus();
+});
+</script>
+</body>
+</html>

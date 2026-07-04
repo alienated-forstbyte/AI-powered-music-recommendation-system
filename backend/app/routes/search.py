@@ -16,7 +16,6 @@ def search(query: str, max_results: int = 5):
 
 
     log_event("search", {
-        "user_id": "user_1",   
         "query": query,
         "results_count": len(results)
     })

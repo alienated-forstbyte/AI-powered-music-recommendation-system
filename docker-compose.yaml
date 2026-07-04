@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   backend:
     build:
@@ -9,11 +7,22 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      - loki
+      loki:
+        condition: service_healthy
     environment:
       - LOKI_URL=http://loki:3100/loki/api/v1/push
+      - USER_DB_PATH=db/user_history.db
+      - MUSIC_PLAYER_SOCKET=/tmp/music-player.sock
     volumes:
       - .:/app
+      - user_db:/app/db
+      - /tmp:/tmp
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   loki:
     image: grafana/loki:2.9.0
@@ -21,6 +30,12 @@ services:
     ports:
       - "3100:3100"
     command: -config.file=/etc/loki/local-config.yaml
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3100/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
 
   grafana:
     image: grafana/grafana:10.0.0
@@ -31,4 +46,11 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_SERVER_HTTP_ADDR=0.0.0.0
     depends_on:
-      - loki
+      loki:
+        condition: service_healthy
+    volumes:
+      - ./observability/grafana/datasources:/etc/grafana/provisioning/datasources
+      - ./observability/grafana/dashboards:/etc/grafana/provisioning/dashboards
+
+volumes:
+  user_db:
