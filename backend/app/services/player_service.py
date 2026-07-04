@@ -53,6 +53,10 @@ def play(video_id: str, title: str = "", channel: str = "") -> dict:
     return daemon_request("play", video_id=video_id, title=title, channel=channel)
 
 
+def play_index(index: int) -> dict:
+    return daemon_request("play_index", index=index)
+
+
 def add(video_id: str, title: str = "", channel: str = "") -> dict:
     return daemon_request("add", video_id=video_id, title=title, channel=channel)
 

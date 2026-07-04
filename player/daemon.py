@@ -4,6 +4,7 @@
 import asyncio
 import json
 import os
+import re
 import signal
 import subprocess
 import tempfile
@@ -69,6 +70,7 @@ class PlayerDaemon:
 
         handlers = {
             "play": lambda: self._cmd_play(args.get("video_id"), args.get("title", ""), args.get("channel", "")),
+            "play_index": lambda: self._cmd_play_index(args.get("index")),
             "pause": self._cmd_pause,
             "toggle": self._cmd_toggle,
             "next": self._cmd_next,
@@ -183,6 +185,14 @@ class PlayerDaemon:
         self._play_index(len(self.queue) - 1)
         return {"status": "playing", "song": self.current_song}
 
+    def _cmd_play_index(self, index):
+        if not self.queue:
+            return {"error": "queue is empty"}
+        if index < 0 or index >= len(self.queue):
+            return {"error": "invalid index"}
+        self._play_index(index)
+        return {"status": "playing", "song": self.current_song}
+
     def _cmd_pause(self):
         if self.ffplay_proc is None:
             return {"status": "no_active_playback"}
@@ -249,7 +259,17 @@ class PlayerDaemon:
     def _cmd_queue(self):
         return {"queue": self.queue, "current_index": self.current_index}
 
+    @staticmethod
+    def _extract_video_id(video_id: str) -> str:
+        m = re.search(r"(?:v=|youtu\.be/|/shorts/|music\.youtube\.com/watch\?v=)([a-zA-Z0-9_-]{11})", video_id)
+        if m:
+            return m.group(1)
+        if re.match(r"^[a-zA-Z0-9_-]{11}$", video_id):
+            return video_id
+        return video_id
+
     def _cmd_add(self, video_id, title="", channel=""):
+        video_id = self._extract_video_id(video_id)
         song = {"video_id": video_id, "title": title or video_id, "channel": channel}
         self.queue.append(song)
         if self.current_index is None and self.queue:

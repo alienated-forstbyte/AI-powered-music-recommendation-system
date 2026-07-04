@@ -3,10 +3,20 @@
 
 import json
 import os
+import re
 import socket
 import sys
 
 SOCKET_PATH = os.environ.get("MUSIC_PLAYER_SOCKET", "/tmp/music-player.sock")
+
+
+def extract_video_id(video_id: str) -> str:
+    m = re.search(r"(?:v=|youtu\.be/|/shorts/|music\.youtube\.com/watch\?v=)([a-zA-Z0-9_-]{11})", video_id)
+    if m:
+        return m.group(1)
+    if re.match(r"^[a-zA-Z0-9_-]{11}$", video_id):
+        return video_id
+    return video_id
 
 
 def send(cmd: str, **args) -> dict:
@@ -62,6 +72,7 @@ def main():
         print()
         print("Commands:")
         print("  play <video_id> [title] [channel]   Play a song (adds to queue)")
+        print("  play <index>                        Play song at queue index (numeric only)")
         print("  add <video_id> [title] [channel]     Add song to queue")
         print("  pause                                 Toggle pause/resume")
         print("  toggle                                Toggle pause/resume")
@@ -82,9 +93,12 @@ def main():
     args = sys.argv[2:]
 
     if cmd == "play":
-        resp = send("play", video_id=args[0], title=args[1] if len(args) > 1 else "", channel=args[2] if len(args) > 2 else "")
+        if args[0].isdigit() and len(args) == 1:
+            resp = send("play_index", index=int(args[0]))
+        else:
+            resp = send("play", video_id=extract_video_id(args[0]), title=args[1] if len(args) > 1 else "", channel=args[2] if len(args) > 2 else "")
     elif cmd == "add":
-        resp = send("add", video_id=args[0], title=args[1] if len(args) > 1 else "", channel=args[2] if len(args) > 2 else "")
+        resp = send("add", video_id=extract_video_id(args[0]), title=args[1] if len(args) > 1 else "", channel=args[2] if len(args) > 2 else "")
     elif cmd == "pause":
         resp = send("pause")
     elif cmd == "toggle" or cmd == "playpause":

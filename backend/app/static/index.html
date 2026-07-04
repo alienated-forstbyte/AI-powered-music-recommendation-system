@@ -149,6 +149,11 @@ async function playerPlay(videoId, title, channel) {
   toast('Added to queue ▶', 'success');
 }
 
+async function playerPlayIndex(index) {
+  await playerAPI('play_index', {index});
+  pollStatus();
+}
+
 async function playerToggle() {
   let resp = await playerAPI('toggle');
   pollStatus();
@@ -198,7 +203,7 @@ async function refreshQueue() {
         <div class="channel">${escHtml(s.channel || '')}</div>
       </div>
       <div class="actions">
-        <button class="btn btn-sm btn-play" onclick="playerPlay('${s.video_id}','${escAttr(s.title)}','${escAttr(s.channel||'')}')">Play</button>
+        <button class="btn btn-sm btn-play" onclick="playerPlayIndex(${i})">Play</button>
         <button class="btn btn-sm btn-skip" onclick="removeFromQueue(${i})">Remove</button>
       </div>
     </div>`;

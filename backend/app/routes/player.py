@@ -9,6 +9,11 @@ def play(video_id: str, title: str = "", channel: str = ""):
     return player_service.play(video_id, title=title, channel=channel)
 
 
+@router.post("/play_index")
+def play_index(index: int):
+    return player_service.play_index(index)
+
+
 @router.post("/add")
 def add(video_id: str, title: str = "", channel: str = ""):
     return player_service.add(video_id, title=title, channel=channel)
