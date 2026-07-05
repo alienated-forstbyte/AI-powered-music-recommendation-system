@@ -34,6 +34,9 @@ data/*.db-shm
 *.csv
 *.parquet
 
+# Runtime collection state (skip/play counts change during use)
+data/collection.json
+
 # (Optional: keep sample data if needed)
 # !data/raw/sample.json
 
@@ -54,7 +57,6 @@ logs/
 # =========================
 # 🐳 Docker
 # =========================
-.dockerignore
 docker-compose.override.yml
 
 # =========================

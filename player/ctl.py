@@ -87,6 +87,7 @@ def main():
         print("  save <name>                           Save current queue as playlist")
         print("  load <name>                           Load a saved playlist")
         print("  list                                  List saved playlists")
+        print("  user [user_id|list|next]               Show/set/cycle/list recommendation users")
         return
 
     cmd = sys.argv[1]
@@ -125,6 +126,22 @@ def main():
         resp = send("load_playlist", name=args[0])
     elif cmd == "list":
         resp = send("list_playlists")
+    elif cmd == "user":
+        from player.user_state import get_current_user, set_current_user, cycle_user, list_users
+        if not args:
+            print(f"Current user: {get_current_user()}")
+            return
+        if args[0] == "list":
+            for u in list_users():
+                print(f"  {u}")
+            return
+        if args[0] == "next":
+            next_u = cycle_user()
+            print(f"Switched to user: {next_u}")
+            return
+        set_current_user(args[0])
+        print(f"User set to: {args[0]}")
+        return
     else:
         print(f"Unknown command: {cmd}")
         sys.exit(1)

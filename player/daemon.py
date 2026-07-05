@@ -271,7 +271,10 @@ class PlayerDaemon:
             if now - self._last_skip_at < 2.0:
                 return {"status": "debounced"}
             self._last_skip_at = now
-        self._record_skip_if_needed()
+
+        prev_song = self.current_song
+        prev_start = self._play_start_time
+
         if self.current_index is None:
             nxt = 0
         elif self.current_index >= len(self.queue) - 1:
@@ -279,11 +282,16 @@ class PlayerDaemon:
                 self._reshuffle_collection()
                 if self.queue:
                     self._play_index(0)
+                    self._record_skip_for(prev_song, prev_start)
                     return {"status": "playing", "song": self.current_song}
+                self._stop_ffplay()
+                self.current_index = None
+                self.current_song = None
             return {"status": "end_of_queue"}
         else:
             nxt = self.current_index + 1
         self._play_index(nxt)
+        self._record_skip_for(prev_song, prev_start)
         return {"status": "playing", "song": self.current_song}
 
     def _cmd_prev(self):
@@ -294,7 +302,8 @@ class PlayerDaemon:
             if now - self._last_skip_at < 2.0:
                 return {"status": "debounced"}
             self._last_skip_at = now
-        self._record_skip_if_needed()
+        prev_song = self.current_song
+        prev_start = self._play_start_time
         if self.current_index is None:
             prv = len(self.queue) - 1
         elif self.current_index <= 0:
@@ -302,6 +311,7 @@ class PlayerDaemon:
         else:
             prv = self.current_index - 1
         self._play_index(prv)
+        self._record_skip_for(prev_song, prev_start)
         return {"status": "playing", "song": self.current_song}
 
     def _cmd_stop(self):
@@ -518,13 +528,16 @@ class PlayerDaemon:
         self._log(f"Reshuffled: {len(self.queue)} songs remaining")
 
     def _record_skip_if_needed(self):
-        if not self._collection_mode or not self.current_song or self._play_start_time is None:
+        self._record_skip_for(self.current_song, self._play_start_time)
+
+    def _record_skip_for(self, song, start_time):
+        if not self._collection_mode or not song or start_time is None:
             return
-        elapsed = time.time() - self._play_start_time
-        dur = self.current_song.get("duration", 180)
+        elapsed = time.time() - start_time
+        dur = song.get("duration", 180)
         if dur > 0 and elapsed < dur * 0.5:
-            COLLECTION.record_skip(self.current_song)
-            title = self.current_song.get("title", "?")
+            COLLECTION.record_skip(song)
+            title = song.get("title", "?")
             self._log(f"Skip recorded (<50%): {title}")
 
     def _record_play_if_needed(self):

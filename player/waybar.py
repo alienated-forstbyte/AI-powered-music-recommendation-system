@@ -9,9 +9,15 @@ Add to ~/.config/waybar/config.jsonc:
     "on-click-right": "python3 /path/to/player/ctl.py stop",
     "on-scroll-up": "python3 /path/to/player/ctl.py next",
     "on-scroll-down": "python3 /path/to/player/ctl.py prev",
+    "on-click-middle": "python3 /path/to/player/ctl.py user next",
     "return-type": "json",
     "interval": 2
   }
+
+CSS classes: playing (green), paused (yellow), stopped (gray).
+Tooltip shows now-playing, mode, and current recommendation user.
+
+For user switching, add a second module (see player/waybar-user.py).
 """
 
 import json
@@ -52,22 +58,33 @@ def waybar_output():
     song = resp.get("song")
     vol = resp.get("volume", 100)
     qlen = resp.get("queue_length", 0)
+    mode = resp.get("mode", "")
+    mode_label = " [collection]" if mode == "collection" else ""
+
+    current_user = "?"
+    user_label = ""
+    try:
+        from player.user_state import get_current_user
+        current_user = get_current_user()
+        user_label = f" 👤{current_user}"
+    except Exception:
+        pass
 
     if status == "playing" and song:
         title = song.get("title", song["video_id"])
         channel = song.get("channel", "")
-        text = f"♫ {title[:40]}"
+        text = f"♫ {title[:35]} {user_label}"
         cls = "playing"
-        tooltip = f"Now Playing: {title}\n{channel}\nVolume: {vol}%  |  Queue: {qlen} songs"
+        tooltip = f"Now Playing: {title}\n{channel}\nVolume: {vol}%  |  Queue: {qlen} songs{mode_label}\n👤 User: {current_user}"
     elif status == "paused" and song:
         title = song.get("title", song["video_id"])
-        text = f"♫ {title[:30]} ⏸"
+        text = f"♫ {title[:25]} ⏸{user_label}"
         cls = "paused"
-        tooltip = f"Paused: {title}\nVolume: {vol}%  |  Queue: {qlen} songs"
+        tooltip = f"Paused: {title}\nVolume: {vol}%  |  Queue: {qlen} songs{mode_label}\n👤 User: {current_user}"
     else:
-        text = "♫ Stopped"
+        text = f"♫ Stopped{user_label}"
         cls = "stopped"
-        tooltip = f"Player stopped | Queue: {qlen} songs"
+        tooltip = f"Player stopped | Queue: {qlen} songs{mode_label}\n👤 User: {current_user}"
 
     print(json.dumps({"text": text, "class": cls, "tooltip": tooltip}))
 

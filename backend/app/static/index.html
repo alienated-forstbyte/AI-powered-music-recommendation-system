@@ -11,8 +11,11 @@ header { background: #1a1a2e; padding: 16px 24px; display: flex; align-items: ce
 header h1 { font-size: 20px; color: #e94560; }
 .user-section { display: flex; align-items: center; gap: 8px; }
 .user-section label { font-size: 13px; color: #aaa; }
-.user-section input { background: #16213e; border: 1px solid #333; color: #e0e0e0; padding: 6px 12px; border-radius: 6px; font-size: 14px; width: 140px; }
-.user-section input:focus { outline: none; border-color: #e94560; }
+.user-section select { background: #16213e; border: 1px solid #333; color: #e0e0e0; padding: 6px 12px; border-radius: 6px; font-size: 14px; width: 140px; cursor: pointer; }
+.user-section select:focus { outline: none; border-color: #e94560; }
+.user-section select optgroup { background: #1a1a2e; color: #e0e0e0; }
+.user-section select option { background: #1a1a2e; color: #e0e0e0; }
+.user-section select option.fav { color: #e94560; font-weight: 600; }
 .search-bar { display: flex; gap: 8px; padding: 16px 24px; max-width: 800px; margin: 0 auto; }
 .search-bar input { flex: 1; background: #1a1a2e; border: 1px solid #333; color: #e0e0e0; padding: 10px 16px; border-radius: 8px; font-size: 15px; }
 .search-bar input:focus { outline: none; border-color: #e94560; }
@@ -78,8 +81,7 @@ header h1 { font-size: 20px; color: #e94560; }
   <h1>Music Recommender</h1>
   <div class="user-section">
     <label>User</label>
-    <input id="userId" placeholder="user_1" value="" list="userList">
-    <datalist id="userList"></datalist>
+    <select id="userId"></select>
   </div>
 </header>
 
@@ -364,22 +366,31 @@ async function skipSong(videoId, tags) {
   }
 }
 
+const FAV_USERS = ['user_2', 'user_3', 'user_4'];
+
 async function loadUserList() {
   try {
     let r = await fetch(API + '/users/');
     let users = await r.json();
-    let dl = document.getElementById('userList');
-    dl.innerHTML = users.map(u => '<option value="' + escAttr(u) + '">').join('');
+    let sel = document.getElementById('userId');
+    let favs = users.filter(u => FAV_USERS.includes(u));
+    let others = users.filter(u => !FAV_USERS.includes(u));
+    let html = '';
+    for (let u of favs) html += '<option class="fav" value="' + escAttr(u) + '">★ ' + escHtml(u) + '</option>';
+    if (favs.length && others.length) html += '<option disabled>──────────</option>';
+    for (let u of others) html += '<option value="' + escAttr(u) + '">' + escHtml(u) + '</option>';
+    sel.innerHTML = html;
+    let saved = localStorage.getItem('music_user_id');
+    if (saved && users.includes(saved)) sel.value = saved;
   } catch(e) {}
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  let saved = localStorage.getItem('music_user_id');
-  if (saved) document.getElementById('userId').value = saved;
+  loadUserList();
   document.getElementById('userId').addEventListener('change', () => {
     localStorage.setItem('music_user_id', document.getElementById('userId').value);
+    loadRecommendations();
   });
-  loadUserList();
   loadRecommendations();
   statusPoll = setInterval(pollStatus, 2000);
   pollStatus();

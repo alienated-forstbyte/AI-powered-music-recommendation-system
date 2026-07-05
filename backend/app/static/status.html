@@ -39,11 +39,18 @@ tr.removed td:first-child::after { content: " (removed)"; color: #e74c3c; font-s
 .toast { position: fixed; bottom: 24px; right: 24px; background: #1a1a2e; color: #ccc; padding: 12px 20px; border-radius: 8px; border-left: 3px solid #2ecc71; box-shadow: 0 4px 20px rgba(0,0,0,.5); font-size: 13px; z-index: 100; animation: slideIn .3s; }
 .toast.error { border-left-color: #e74c3c; }
 @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+#userSelect optgroup { background: #1a1a2e; color: #e0e0e0; }
+#userSelect option { background: #1a1a2e; color: #e0e0e0; }
+#userSelect option.fav { color: #e94560; font-weight: 600; }
 </style>
 </head>
 <body>
 <header>
   <h1>Collection Status</h1>
+  <div class="user-section" style="display:flex;align-items:center;gap:8px;">
+    <label style="font-size:13px;color:#888;">User</label>
+    <select id="userSelect" style="background:#16213e;border:1px solid #333;color:#e0e0e0;padding:6px 12px;border-radius:6px;font-size:14px;cursor:pointer;"></select>
+  </div>
   <a href="/">&larr; Back to Music Player</a>
 </header>
 <div class="container">
@@ -67,7 +74,7 @@ async function loadStatus() {
     let statusData = await statusResp.json();
     let data = await collectionResp.json();
 
-    let currentUser = localStorage.getItem('music_user_id') || 'user_1';
+    let currentUser = document.getElementById('userSelect').value || localStorage.getItem('music_user_id') || 'user_1';
 
     if (statusData.error) {
       playerInfo.innerHTML = '<span style="color:#e74c3c;">Daemon not connected</span>';
@@ -147,7 +154,33 @@ function toast(msg, type) {
 }
 function escHtml(s) { let d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function escAttr(s) { return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-document.addEventListener('DOMContentLoaded', loadStatus);
+
+const FAV_USERS = ['user_2', 'user_3', 'user_4'];
+
+async function loadUserSelect() {
+  try {
+    let r = await fetch('/users/');
+    let users = await r.json();
+    let sel = document.getElementById('userSelect');
+    let favs = users.filter(u => FAV_USERS.includes(u));
+    let others = users.filter(u => !FAV_USERS.includes(u));
+    let html = '';
+    for (let u of favs) html += '<option class="fav" value="' + escAttr(u) + '">★ ' + escHtml(u) + '</option>';
+    if (favs.length && others.length) html += '<option disabled>──────────</option>';
+    for (let u of others) html += '<option value="' + escAttr(u) + '">' + escHtml(u) + '</option>';
+    sel.innerHTML = html;
+    let saved = localStorage.getItem('music_user_id');
+    if (saved && users.includes(saved)) sel.value = saved;
+    sel.addEventListener('change', () => {
+      localStorage.setItem('music_user_id', sel.value);
+    });
+  } catch(e) {}
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadUserSelect();
+  loadStatus();
+});
 </script>
 </body>
 </html>
