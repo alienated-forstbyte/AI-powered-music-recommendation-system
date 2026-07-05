@@ -7,8 +7,10 @@ import os
 import re
 import signal
 import subprocess
+import sys
 import tempfile
 import threading
+import time
 from pathlib import Path
 
 SOCKET_PATH = os.environ.get("MUSIC_PLAYER_SOCKET", "/tmp/music-player.sock")
@@ -19,6 +21,11 @@ CACHE_DIR = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "mu
 YTLP_PATH = os.environ.get("YTLP_PATH", "yt-dlp")
 YTLP_EXTRA = os.environ.get("YTLP_EXTRA", "--js-runtimes deno --cookies-from-browser firefox")
 STATE_FILE = CACHE_DIR / "state.json"
+
+COLLECTION = None
+if "--collection" in sys.argv:
+    from player import collection
+    COLLECTION = collection
 
 
 class PlayerDaemon:
@@ -32,9 +39,15 @@ class PlayerDaemon:
         self._ffplay_ended = threading.Event()
         self._skip_lock = threading.Lock()
         self._last_skip_at = 0.0
+        self._play_start_time: float | None = None
+        self._collection_mode = COLLECTION is not None
 
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        self._load_state()
+        self._cleanup_orphan_ffplay()
+        if self._collection_mode:
+            self._init_collection()
+        else:
+            self._load_state()
 
     # ── socket handling ──────────────────────────────────────────
 
@@ -85,6 +98,11 @@ class PlayerDaemon:
             "list_playlists": self._cmd_list_playlists,
             "load_playlist": lambda: self._cmd_load_playlist(args.get("name")),
             "save_playlist": lambda: self._cmd_save_playlist(args.get("name")),
+            "collection_add": lambda: self._cmd_collection_add(args.get("video_id"), args.get("title", ""), args.get("channel", "")),
+            "collection_add_url": lambda: self._cmd_collection_add_url(args.get("url"), args.get("title", "")),
+            "collection_stats": lambda: self._cmd_collection_stats(),
+            "collection_list": lambda: self._cmd_collection_list(),
+            "collection_reset_skips": lambda: self._cmd_collection_reset_skips(args.get("video_id"), args.get("url")),
         }
         handler = handlers.get(cmd)
         if handler is None:
@@ -96,7 +114,12 @@ class PlayerDaemon:
 
     # ── playback ─────────────────────────────────────────────────
 
-    def _get_audio_url(self, video_id: str) -> str | None:
+    def _get_audio_url(self, song: dict) -> str | None:
+        if song.get("source") == "url":
+            return song.get("url")
+        video_id = song.get("video_id", "")
+        if not video_id:
+            return None
         try:
             cmd = [YTLP_PATH] + YTLP_EXTRA.split() + ["-f", "bestaudio", "--get-url", f"https://youtube.com/watch?v={video_id}"]
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=60, env={**os.environ, "PATH": os.environ.get("PATH", "")})
@@ -122,11 +145,14 @@ class PlayerDaemon:
             return
         song = self.queue[self.current_index]
         self.current_song = song
-        self._save_state()
+        self._play_start_time = time.time()
+        if not self._collection_mode:
+            self._save_state()
 
-        url = self._get_audio_url(song["video_id"])
+        url = self._get_audio_url(song)
+        vid = song.get("video_id", song.get("url", "?"))
         if not url:
-            self._log(f"Can't get audio URL for {song['video_id']}, skipping")
+            self._log(f"Can't get audio URL for {vid}, skipping")
             threading.Thread(target=self._skip_after_cooldown, daemon=True).start()
             return
 
@@ -139,7 +165,7 @@ class PlayerDaemon:
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             preexec_fn=os.setsid,
         )
-        self._log(f"Playing: {song.get('title', song['video_id'])}")
+        self._log(f"Playing: {song.get('title', vid)}")
 
         threading.Thread(target=self._wait_ffplay, daemon=True).start()
 
@@ -153,30 +179,48 @@ class PlayerDaemon:
         if proc:
             proc.wait()
             self._ffplay_ended.set()
-            # Only auto-advance if ffplay exited cleanly (song finished naturally),
-            # not if it failed (e.g. expired URL, network error)
             if proc.returncode == 0 and not self.paused and self.current_index is not None:
-                if len(self.queue) > 1:
+                self._record_play_if_needed()
+                if self.current_index >= len(self.queue) - 1:
+                    if self._collection_mode:
+                        self._log("End of collection batch, reshuffling")
+                        self._reshuffle_collection()
+                        if self.queue:
+                            self._play_index(0)
+                        else:
+                            self._cmd_stop()
+                    else:
+                        self._log("Song finished, end of queue")
+                        self._cmd_stop()
+                else:
                     self._log("Song finished, advancing to next")
                     self._cmd_next()
-                else:
-                    self._log("Song finished, end of queue")
-                    self._cmd_stop()
 
     def _stop_ffplay(self):
-        if self.ffplay_proc:
+        proc = self.ffplay_proc
+        self.ffplay_proc = None
+        if proc is None:
+            return
+        try:
+            pgid = os.getpgid(proc.pid)
+            os.killpg(pgid, signal.SIGTERM)
+        except (ProcessLookupError, PermissionError, OSError):
             try:
-                os.killpg(os.getpgid(self.ffplay_proc.pid), signal.SIGTERM)
-            except (ProcessLookupError, PermissionError):
+                proc.kill()
+            except Exception:
+                pass
+        try:
+            proc.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(pgid, signal.SIGKILL)
+            except Exception:
                 pass
             try:
-                self.ffplay_proc.wait(timeout=2)
-            except subprocess.TimeoutExpired:
-                try:
-                    self.ffplay_proc.kill()
-                except Exception:
-                    pass
-            self.ffplay_proc = None
+                proc.kill()
+            except Exception:
+                pass
+            proc.wait(timeout=2)
 
     # ── commands ──────────────────────────────────────────────────
 
@@ -227,7 +271,18 @@ class PlayerDaemon:
             if now - self._last_skip_at < 2.0:
                 return {"status": "debounced"}
             self._last_skip_at = now
-        nxt = 0 if self.current_index is None else (self.current_index + 1) % len(self.queue)
+        self._record_skip_if_needed()
+        if self.current_index is None:
+            nxt = 0
+        elif self.current_index >= len(self.queue) - 1:
+            if self._collection_mode:
+                self._reshuffle_collection()
+                if self.queue:
+                    self._play_index(0)
+                    return {"status": "playing", "song": self.current_song}
+            return {"status": "end_of_queue"}
+        else:
+            nxt = self.current_index + 1
         self._play_index(nxt)
         return {"status": "playing", "song": self.current_song}
 
@@ -239,7 +294,13 @@ class PlayerDaemon:
             if now - self._last_skip_at < 2.0:
                 return {"status": "debounced"}
             self._last_skip_at = now
-        prv = len(self.queue) - 1 if self.current_index is None else (self.current_index - 1) % len(self.queue)
+        self._record_skip_if_needed()
+        if self.current_index is None:
+            prv = len(self.queue) - 1
+        elif self.current_index <= 0:
+            return {"status": "start_of_queue"}
+        else:
+            prv = self.current_index - 1
         self._play_index(prv)
         return {"status": "playing", "song": self.current_song}
 
@@ -307,13 +368,18 @@ class PlayerDaemon:
         if self.ffplay_proc is not None:
             status_str = "paused" if self.paused else "playing"
 
-        return {
+        result = {
             "status": status_str,
             "song": self.current_song,
             "queue_length": len(self.queue),
             "current_index": self.current_index,
             "volume": self.volume,
         }
+        if self._collection_mode:
+            st = COLLECTION.stats()
+            result["collection"] = st
+            result["mode"] = "collection"
+        return result
 
     # ── playlists ────────────────────────────────────────────────
 
@@ -347,9 +413,42 @@ class PlayerDaemon:
         self._do_play()
         return {"status": "loaded", "name": name, "count": len(self.queue)}
 
+    # ── collection commands ──────────────────────────────────────
+
+    def _cmd_collection_add(self, video_id, title="", channel=""):
+        if not COLLECTION:
+            return {"error": "not in collection mode"}
+        song = COLLECTION.add_from_youtube(video_id, title, channel)
+        self._log(f"Added to collection: {song.get('title', video_id)}")
+        return {"status": "added", "song": song}
+
+    def _cmd_collection_add_url(self, url, title=""):
+        if not COLLECTION:
+            return {"error": "not in collection mode"}
+        song = COLLECTION.add_from_url(url, title)
+        self._log(f"Added URL to collection: {song.get('title', url)}")
+        return {"status": "added", "song": song}
+
+    def _cmd_collection_stats(self):
+        if not COLLECTION:
+            return {"error": "not in collection mode"}
+        return COLLECTION.stats()
+
+    def _cmd_collection_list(self):
+        if not COLLECTION:
+            return {"error": "not in collection mode"}
+        return {"songs": COLLECTION.list_all(), "skip_threshold": COLLECTION.SKIP_THRESHOLD}
+
+    def _cmd_collection_reset_skips(self, video_id=None, url=None):
+        if not COLLECTION:
+            return {"error": "not in collection mode"}
+        return COLLECTION.reset_skips(video_id=video_id, url=url)
+
     # ── persistence ──────────────────────────────────────────────
 
     def _save_state(self):
+        if self._collection_mode:
+            return
         try:
             data = {
                 "queue": self.queue,
@@ -363,6 +462,24 @@ class PlayerDaemon:
         except Exception as e:
             self._log(f"save error: {e}")
 
+    def _cleanup_orphan_ffplay(self):
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["pgrep", "-x", "ffplay"], capture_output=True, text=True, timeout=5
+            )
+            for pid_str in result.stdout.strip().split():
+                if not pid_str:
+                    continue
+                pid = int(pid_str)
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                    self._log(f"Killed orphan ffplay pid={pid}")
+                except (ProcessLookupError, PermissionError, OSError):
+                    pass
+        except Exception as e:
+            self._log(f"cleanup error: {e}")
+
     def _load_state(self):
         try:
             if STATE_FILE.exists():
@@ -373,6 +490,47 @@ class PlayerDaemon:
                 self.volume = data.get("volume", 100)
         except Exception as e:
             self._log(f"load error: {e}")
+
+    # ── collection mode ──────────────────────────────────────────
+
+    def _init_collection(self):
+        playlist = COLLECTION.shuffled_playlist()
+        if not playlist:
+            self._log("Collection is empty or all songs were skipped out")
+            return
+        self.queue = playlist
+        self.current_index = 0
+        self._log(f"Collection mode: {len(self.queue)} songs")
+
+    def _reshuffle_collection(self):
+        import random
+        pool = COLLECTION.active_pool(COLLECTION.load())
+        remaining = self.queue[self.current_index + 1:] if self.current_index is not None else []
+        seen_ids = {s.get("video_id") or s.get("url") for s in remaining if s.get("video_id") or s.get("url")}
+        fresh = [s for s in pool if (s.get("video_id") or s.get("url")) not in seen_ids]
+        if not fresh and not remaining:
+            self._log("Collection exhausted, reshuffling all")
+            fresh = pool
+        random.shuffle(fresh)
+        self.queue = remaining + fresh
+        if self.current_index is not None and self.current_index >= len(self.queue):
+            self.current_index = len(self.queue) - 1 if self.queue else None
+        self._log(f"Reshuffled: {len(self.queue)} songs remaining")
+
+    def _record_skip_if_needed(self):
+        if not self._collection_mode or not self.current_song or self._play_start_time is None:
+            return
+        elapsed = time.time() - self._play_start_time
+        dur = self.current_song.get("duration", 180)
+        if dur > 0 and elapsed < dur * 0.5:
+            COLLECTION.record_skip(self.current_song)
+            title = self.current_song.get("title", "?")
+            self._log(f"Skip recorded (<50%): {title}")
+
+    def _record_play_if_needed(self):
+        if not self._collection_mode or not self.current_song:
+            return
+        COLLECTION.record_play(self.current_song)
 
     # ── lifecycle ────────────────────────────────────────────────
 

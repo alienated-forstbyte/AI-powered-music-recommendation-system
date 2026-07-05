@@ -82,3 +82,13 @@ def load(name: str):
 @router.get("/playlists")
 def list_playlists():
     return player_service.list_playlists()
+
+
+@router.get("/collection")
+def collection_list():
+    return player_service.collection_list()
+
+
+@router.post("/collection/reset_skips")
+def collection_reset_skips(video_id: str = None, url: str = None):
+    return player_service.collection_reset_skips(video_id=video_id, url=url)

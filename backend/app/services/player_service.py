@@ -111,3 +111,11 @@ def load_playlist(name: str) -> dict:
 
 def list_playlists() -> dict:
     return daemon_request("list_playlists")
+
+
+def collection_list() -> dict:
+    return daemon_request("collection_list")
+
+
+def collection_reset_skips(video_id: str = None, url: str = None) -> dict:
+    return daemon_request("collection_reset_skips", video_id=video_id, url=url)

@@ -77,8 +77,9 @@ header h1 { font-size: 20px; color: #e94560; }
 <header>
   <h1>Music Recommender</h1>
   <div class="user-section">
-    <label>User ID</label>
-    <input id="userId" placeholder="user_1" value="">
+    <label>User</label>
+    <input id="userId" placeholder="user_1" value="" list="userList">
+    <datalist id="userList"></datalist>
   </div>
 </header>
 
@@ -363,14 +364,23 @@ async function skipSong(videoId, tags) {
   }
 }
 
+async function loadUserList() {
+  try {
+    let r = await fetch(API + '/users/');
+    let users = await r.json();
+    let dl = document.getElementById('userList');
+    dl.innerHTML = users.map(u => '<option value="' + escAttr(u) + '">').join('');
+  } catch(e) {}
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   let saved = localStorage.getItem('music_user_id');
   if (saved) document.getElementById('userId').value = saved;
   document.getElementById('userId').addEventListener('change', () => {
     localStorage.setItem('music_user_id', document.getElementById('userId').value);
   });
+  loadUserList();
   loadRecommendations();
-  // Poll player status every 2s
   statusPoll = setInterval(pollStatus, 2000);
   pollStatus();
 });
